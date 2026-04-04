@@ -24,4 +24,4 @@ Then open http://localhost:8000 in your browser.
 ## Features
 
 - Displays a welcome message.
-- Button to change the message dynamically using JavaScript.
+- Button to change the message dynamically using JavaScript...
