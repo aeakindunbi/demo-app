@@ -12,7 +12,7 @@ client.collectDefaultMetrics({
   prefix: 'myapp_',
 });
 
-// Custom metric - Fixed label handling
+// Custom metrics
 const httpRequestsTotal = new client.Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',
@@ -20,8 +20,25 @@ const httpRequestsTotal = new client.Counter({
   registers: [register]
 });
 
+const httpRequestDurationSeconds = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],   // Good buckets for web apps
+  registers: [register]
+});
+
+const httpErrorsTotal = new client.Counter({
+  name: 'http_errors_total',
+  help: 'Total number of HTTP errors',
+  labelNames: ['method', 'route', 'status'],
+  registers: [register]
+});
+
 // Create Server
 const server = http.createServer(async (req, res) => {
+  const startTime = Date.now();
+
   // ====================== METRICS ENDPOINT ======================
   if (req.url === '/metrics') {
     try {
@@ -37,32 +54,30 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // ====================== YOUR FILE SERVING LOGIC ======================
-  const route = req.url === "/" ? "index.html" : req.url;   // Safe route name
+  // ====================== FILE SERVING LOGIC ======================
+  const route = req.url === "/" ? "index.html" : req.url;
+  const method = req.method;
 
   let filePath = path.join(__dirname, route);
 
   fs.readFile(filePath, (err, data) => {
+    const duration = (Date.now() - startTime) / 1000;   // in seconds
+
     if (err) {
       res.writeHead(404);
       res.end("File not found");
 
-      // Record 404 - provide ALL labels
-      httpRequestsTotal.inc({
-        method: req.method,
-        route: route,
-        status: 404
-      });
+      const status = 404;
+      httpRequestsTotal.inc({ method, route, status });
+      httpErrorsTotal.inc({ method, route, status });
+      httpRequestDurationSeconds.observe({ method, route, status }, duration);
     } else {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(data);
 
-      // Record 200 - provide ALL labels
-      httpRequestsTotal.inc({
-        method: req.method,
-        route: route,
-        status: 200
-      });
+      const status = 200;
+      httpRequestsTotal.inc({ method, route, status });
+      httpRequestDurationSeconds.observe({ method, route, status }, duration);
     }
   });
 });
