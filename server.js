@@ -3,69 +3,71 @@ const fs = require("fs");
 const path = require("path");
 const client = require("prom-client");
 
-// Create Registry
+// 1. Create Registry
 const register = new client.Registry();
 
-// Collect default Node.js metrics
+// 2. Collect default Node.js metrics (Memory, CPU, etc.)
+// The prefix matches your Grafana JSON
 client.collectDefaultMetrics({
   register,
-  prefix: 'myapp_',
+  prefix: "myapp_",
 });
 
-// Custom metrics
+// 3. Custom metrics with the 'myapp_' prefix to match your dashboard
 const httpRequestsTotal = new client.Counter({
-  name: 'http_requests_total',
-  help: 'Total number of HTTP requests',
-  labelNames: ['method', 'route', 'status'],
-  registers: [register]
+  name: "myapp_http_requests_total",
+  help: "Total number of HTTP requests",
+  labelNames: ["method", "route", "status"],
+  registers: [register],
 });
 
 const httpRequestDurationSeconds = new client.Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'Duration of HTTP requests in seconds',
-  labelNames: ['method', 'route', 'status'],
-  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],   // Good buckets for web apps
-  registers: [register]
+  name: "myapp_http_request_duration_seconds",
+  help: "Duration of HTTP requests in seconds",
+  labelNames: ["method", "route", "status"],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+  registers: [register],
 });
 
 const httpErrorsTotal = new client.Counter({
-  name: 'http_errors_total',
-  help: 'Total number of HTTP errors',
-  labelNames: ['method', 'route', 'status'],
-  registers: [register]
+  name: "myapp_http_errors_total",
+  help: "Total number of HTTP errors",
+  labelNames: ["method", "route", "status"],
+  registers: [register],
 });
 
-// Create Server
+// 4. Create Server
 const server = http.createServer(async (req, res) => {
   const startTime = Date.now();
+  const method = req.method;
+  const route = req.url === "/" ? "index.html" : req.url;
 
   // ====================== METRICS ENDPOINT ======================
-  if (req.url === '/metrics') {
+  if (req.url === "/metrics") {
     try {
-      res.setHeader('Content-Type', register.contentType);
+      res.setHeader("Content-Type", register.contentType);
       const metrics = await register.metrics();
       res.end(metrics);
       return;
     } catch (err) {
-      console.error('Error generating metrics:', err);
+      console.error("Error generating metrics:", err);
       res.writeHead(500);
-      res.end('Error generating metrics');
+      res.end("Error generating metrics");
       return;
     }
   }
 
-  // ====================== FILE SERVING LOGIC ======================
-  const route = req.url === "/" ? "index.html" : req.url;
-  const method = req.method;
-
+  // ====================== FILE SERVING / APP LOGIC ======================
+  // Note: Ensure index.html exists in your directory, or update this logic
   let filePath = path.join(__dirname, route);
 
   fs.readFile(filePath, (err, data) => {
-    const duration = (Date.now() - startTime) / 1000;   // in seconds
+    const duration = (Date.now() - startTime) / 1000;
 
     if (err) {
-      res.writeHead(404);
-      res.end("File not found");
+      // If file not found, serve a simple message
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Page not found");
 
       const status = 404;
       httpRequestsTotal.inc({ method, route, status });
@@ -82,7 +84,11 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(3000, () => {
-  console.log("Server running at http://localhost:3000");
-  console.log("Metrics available at http://localhost:3000/metrics");
+// 5. LISTEN ON 0.0.0.0 (Crucial for Docker/ECS/AWS Scrapers)
+const PORT = 3000;
+const HOST = "0.0.0.0";
+
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running at http://${HOST}:${PORT}`);
+  console.log(`📊 Metrics available at http://${HOST}:${PORT}/metrics`);
 });
