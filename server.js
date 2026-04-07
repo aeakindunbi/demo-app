@@ -67,7 +67,7 @@ const server = http.createServer(async (req, res) => {
     if (err) {
       // If file not found, serve a simple message
       res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Page not found");
+      res.end("Page not found..");
 
       const status = 404;
       httpRequestsTotal.inc({ method, route, status });
